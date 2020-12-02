@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: Using an EFS file system to manage data science dependencies.
+Globals:
+  Function:
+    Runtime: python3.8
+    CodeUri: .
+    MemorySize: 3008
+    Timeout: 900
+    AutoPublishAlias: live
+    DeploymentPreference:
+      Type: AllAtOnce
+    ProvisionedConcurrencyConfig:
+      ProvisionedConcurrentExecutions: 1
+    VpcConfig:
+      SecurityGroupIds:
+        - sg-00ea7924c8238d129
+      SubnetIds:
+        - subnet-0fede24d7b5b2531e
+        - subnet-0b4ff175f314e4346
+    FileSystemConfigs:
+        - Arn: arn:aws:elasticfilesystem:eu-west-1:<ACCOUNT_ID>:access-point/fsap-0108924b681847906
+          LocalMountPath: /mnt/DataScience
+    Environment:
+      Variables:
+        PYTHONPATH: /mnt/DataScience/lib
+        OUTPUT_BUCKET: !Ref OutputBucket
+Resources:
+  InputBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-input"
+  OutputBucket:
+    Type: 'AWS::S3::Bucket'
+  RandomForestClassifier:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: random_forest_classifier.lambda_handler
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /rfc
+            Method: GET
+  LogisticRegression:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: logistic_regression.lambda_handler
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /lr
+            Method: GET
+  MatplotlibImage:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: matplotlib_image.lambda_handler
+      Policies:
+        - S3WritePolicy:
+            BucketName: !Ref OutputBucket
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            Path: /mi
+            Method: GET
+  PapermillS3:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: papermill_s3.lambda_handler
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Sub "${AWS::StackName}-input"
+        - S3WritePolicy:
+            BucketName: !Ref OutputBucket
+      Events:
+        BucketEvent:
+          Type: S3
+          Properties:
+            Bucket:
+              Ref: InputBucket
+            Events:
+              - 's3:ObjectCreated:*'
