@@ -3,7 +3,7 @@ Transform: 'AWS::Serverless-2016-10-31'
 Description: Using an EFS file system to manage data science dependencies.
 Globals:
   Function:
-    Runtime: python3.8
+    Runtime: python3.13
     CodeUri: .
     MemorySize: 3008
     Timeout: 900
