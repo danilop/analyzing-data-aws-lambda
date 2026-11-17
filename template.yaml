@@ -59,6 +59,9 @@ Resources:
       Policies:
         - S3WritePolicy:
             BucketName: !Ref OutputBucket
+        # s3:GetObject is needed for the presigned URL returned by the function to work
+        - S3ReadPolicy:
+            BucketName: !Ref OutputBucket
       Events:
         Api:
           Type: HttpApi
