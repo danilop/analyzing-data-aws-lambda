@@ -17,15 +17,23 @@ import io
 import time
 
 import boto3
+from botocore.config import Config
 
 import os
 
 OUTPUT_BUCKET = os.environ['OUTPUT_BUCKET']
 OUTPUT_KEY = 'matplotlib_image.png'
+# How long the returned (presigned) image URL stays valid, in seconds
+URL_EXPIRATION = int(os.environ.get('URL_EXPIRATION', '3600'))
 
 matplotlib.rcParams['contour.negative_linestyle'] = 'solid'
 
-image_url = 'https://{}.s3.amazonaws.com/{}'.format(OUTPUT_BUCKET, OUTPUT_KEY)
+# Regional endpoint + SigV4 so presigned URLs work right after bucket creation
+s3_client = boto3.client(
+    's3',
+    region_name=os.environ.get('AWS_REGION'),
+    config=Config(signature_version='s3v4', s3={'addressing_style': 'virtual'})
+)
 
 def upload_image():
     # Example settings
@@ -111,12 +119,19 @@ def upload_image():
     plt.savefig(img_data, format='png')
     img_data.seek(0)
 
-    s3 = boto3.resource('s3')
-    bucket = s3.Bucket(OUTPUT_BUCKET)
-    bucket.put_object(Body=img_data, ContentType='image/png', Key=OUTPUT_KEY, ACL='public-read')
+    # No ACL: new buckets enforce "bucket owner" object ownership (ACLs disabled),
+    # so ACL='public-read' would fail. The image is shared via a presigned URL instead.
+    s3_client.put_object(Bucket=OUTPUT_BUCKET, Key=OUTPUT_KEY,
+                         Body=img_data, ContentType='image/png')
+    plt.close('all')
 
 def lambda_handler(event, context):
     upload_image()
+    image_url = s3_client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': OUTPUT_BUCKET, 'Key': OUTPUT_KEY},
+        ExpiresIn=URL_EXPIRATION
+    )
     return {
         'statusCode': 302,
         'headers': {
